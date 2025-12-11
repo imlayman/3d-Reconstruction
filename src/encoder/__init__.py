@@ -4,5 +4,6 @@ from src.encoder import (
 
 
 encoder_dict = {
-    'pointnet_local_pool': pointnet.LocalPoolPointnet
+    'pointnet_local_pool': pointnet.LocalPoolPointnet,
+    'FKAConvEncoder2d': pointnet.FKAConvEncoder2d,
 }

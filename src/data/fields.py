@@ -95,12 +95,11 @@ class PatchPointsField(Field):
         data['normalized'] = p_n
 
         return data
-
+9
 class PointsField(Field):
     ''' Point Field.
 
-    It provides the field to load point data. This is used for the points
-    randomly sampled in the bounding volume of the 3D shape.
+    用于定义和加载 点云数据字段,它从文件中加载随机采样的点,并处理相应的占据信息(occupancy)
 
     Args:
         file_name (str): file name
@@ -115,7 +114,7 @@ class PointsField(Field):
         self.multi_files = multi_files
 
     def load(self, model_path, idx, category):
-        ''' Loads the data point.
+        ''' 加载点云数据。根据 model_path 和文件名拼接出完整路径，并加载数据文件中的点和占据信息.
 
         Args:
             model_path (str): path to model
@@ -128,14 +127,14 @@ class PointsField(Field):
             num = np.random.randint(self.multi_files)
             file_path = os.path.join(model_path, self.file_name, '%s_%02d.npz' % (self.file_name, num))
 
-        points_dict = np.load(file_path)
-        points = points_dict['points']
+        points_dict = np.load(file_path) # 加载 .npz 文件
+        points = points_dict['points'] # 获取点数据
         # Break symmetry if given in float16:
-        if points.dtype == np.float16:
-            points = points.astype(np.float32)
-            points += 1e-4 * np.random.randn(*points.shape)
+        if points.dtype == np.float16: 
+            points = points.astype(np.float32) # 转换为 float32
+            points += 1e-4 * np.random.randn(*points.shape) # 添加小的随机噪声，打破对称性
 
-        occupancies = points_dict['occupancies']
+        occupancies = points_dict['occupancies'] 
         if self.unpackbits:
             occupancies = np.unpackbits(occupancies)[:points.shape[0]]
         occupancies = occupancies.astype(np.float32)

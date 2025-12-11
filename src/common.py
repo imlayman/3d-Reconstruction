@@ -5,7 +5,7 @@ import numpy as np
 import math
 
 
-def compute_iou(occ1, occ2):
+def compute_iou(occ1, occ2,eps=1e-6):
     ''' Computes the Intersection over Union (IoU) value for two sets of
     occupancy values.
 
@@ -31,6 +31,15 @@ def compute_iou(occ1, occ2):
     area_union = (occ1 | occ2).astype(np.float32).sum(axis=-1)
     area_intersect = (occ1 & occ2).astype(np.float32).sum(axis=-1)
 
+    # train.py
+    # iou = np.divide(
+    #     area_intersect,
+    #     area_union,
+    #     out=np.zeros_like(area_intersect, dtype=np.float32),
+    #     where=(area_union > 0)
+    # )
+
+    # generate.py/eval_meshes.py
     iou = (area_intersect / area_union)
 
     return iou

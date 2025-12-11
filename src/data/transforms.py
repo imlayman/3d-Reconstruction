@@ -28,7 +28,7 @@ class PointcloudNoise(object):
         return data_out
 
 class SubsamplePointcloud(object):
-    ''' Point cloud subsampling transformation class.
+    ''' 从点云数据中随机采样指定数量的点(2048个)
 
     It subsamples the point cloud data.
 
@@ -66,7 +66,7 @@ class SubsamplePointcloud(object):
 
 
 class SubsamplePoints(object):
-    ''' Points subsampling transformation class.
+    ''' 从点数据中随机采样指定数量的点(2048个)
 
     It subsamples the points data.
 
@@ -85,7 +85,7 @@ class SubsamplePoints(object):
         points = data[None]
         occ = data['occ']
         # print('points.shape', points.shape)
-        data_out = data.copy()
+        data_out = data.copy() # 创建数据副本，避免修改原数据
         if isinstance(self.N, int):
             idx = np.random.randint(points.shape[0], size=self.N)
             # print(idx)
@@ -120,4 +120,4 @@ class SubsamplePoints(object):
                 'occ': occ,
                 'volume': volume,
             })
-        return data_out
+        return data_out #包含采样点坐标、occ、索引

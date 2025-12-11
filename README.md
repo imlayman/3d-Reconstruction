@@ -34,7 +34,7 @@ python setup.py build_ext --inplace
 
 ## Dataset
 ### ShapeNet
-You can download the dataset (73.4 GB) by running the [script](https://github.com/autonomousvision/occupancy_networks#preprocessed-data) from Occupancy Networks. After, you should have the dataset in `data/ShapeNet` folder.  
+You can download the dataset (73.4 GB) by running the [script](https://github.com/autonomousvision/occupancy_networks#preprocessed-data) from Occupancy Networks. After, you should have the dataset in `/data3/xxf/dataset/ShapeNet` folder.  
 
 
 ### Synthetic Indoor Scene Dataset

@@ -57,18 +57,20 @@ class Shapes3dDataset(data.Dataset):
         self.transform = transform
         self.cfg = cfg
 
-        # If categories is None, use all subfolders
+        # 如果categories是None，则使用所有的类别
         if categories is None:
-            categories = os.listdir(dataset_folder)
+            categories = os.listdir(dataset_folder) # 执行后还会包含文件
+            # 过滤后的结果只保留 子文件夹，忽略文件
             categories = [c for c in categories
                           if os.path.isdir(os.path.join(dataset_folder, c))]
+            # categories = ['02958343']
 
         # Read metadata file
         metadata_file = os.path.join(dataset_folder, 'metadata.yaml')
 
         if os.path.exists(metadata_file):
             with open(metadata_file, 'r') as f:
-                self.metadata = yaml.safe_load(f)
+                self.metadata = yaml.safe_load(f) # 内容解析为字典传给metadata
         else:
             self.metadata = {
                 c: {'id': c, 'name': 'n/a'} for c in categories
@@ -85,6 +87,7 @@ class Shapes3dDataset(data.Dataset):
         self.models = []
         for c_idx, c in enumerate(categories):
             subpath = os.path.join(dataset_folder, c)
+            # subpath = os.path.join(dataset_folder)
             if not os.path.isdir(subpath):
                 logger.warning('Category %s does not exist in dataset.' % c)
 
@@ -144,6 +147,7 @@ class Shapes3dDataset(data.Dataset):
         c_idx = self.metadata[category]['idx']
 
         model_path = os.path.join(self.dataset_folder, category, model)
+        # model_path = os.path.join(self.dataset_folder, model)
         data = {}
 
         if self.cfg['data']['input_type'] == 'pointcloud_crop':
@@ -257,13 +261,17 @@ def collate_remove_none(batch):
     Args:
         batch: batch
     '''
-
+    # 去掉 batch 中所有值为 None 的样本
     batch = list(filter(lambda x: x is not None, batch))
+    # PyTorch 中的一个默认函数，用于将一个批次的数据打包成张量，
+    # 将每个数据字段堆叠成一个具有批次大小的张量
     return data.dataloader.default_collate(batch)
 
 
 def worker_init_fn(worker_id):
-    ''' Worker init function to ensure true randomness.
+    ''' 初始化每个数据加载器的工作线程(worker)。
+        目的是确保每个线程之间的随机性是真正独立的，
+        以便数据加载的随机性得到保证
     '''
     def set_num_threads(nt):
         try: 

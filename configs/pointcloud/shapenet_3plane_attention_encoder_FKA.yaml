@@ -1,3 +1,4 @@
+# 在GridFormer_v上
 method: conv_onet
 data:
   input_type: pointcloud
@@ -22,14 +23,14 @@ model:
       depth: 4 #网络深度
       merge_mode: concat
       start_filts: 32 #起始卷积的通道数
-  # decoder: simple_local #解码器
-  decoder: ulto_decoder
+  decoder: simple_local #解码器
+  # decoder: ulto_decoder
   decoder_kwargs:
     sample_mode: bilinear # bilinear / nearest #采样模式
     hidden_size: 32
   c_dim: 32 #编码器输出的特征维度
 training:
-  out_dir: /data2/xxf/GridFormer/out/pointcloud/shapenet_3plane_attention_FKAConvEncoder_3000_n0.005_IID/
+  out_dir: /data2/xxf/GridFormer/out/pointcloud/shapenet_3plane_attention_FKAConvEncoder_3000_n0.005/
   batch_size: 16
   model_selection_metric: iou
   model_selection_mode: maximize

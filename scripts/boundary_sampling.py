@@ -46,7 +46,7 @@ def calculate_constrasitve(input_folder):
     
     
 if __name__ == '__main__':
-    lst_paths = glob.glob(os.path.join('../data/ShapeNet/', '*','*.lst'))
+    lst_paths = glob.glob(os.path.join('/data3/xxf/dataset/ShapeNet/', '*','*.lst'))
     all_folder = []
     for lst_path in lst_paths:
         with open(lst_path) as f:

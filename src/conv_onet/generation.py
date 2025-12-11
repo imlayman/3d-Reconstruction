@@ -1,6 +1,6 @@
 import torch
 import torch.optim as optim
-from torch import autograd
+from torch import autograd,nn
 import numpy as np
 from tqdm import trange, tqdm
 import trimesh
@@ -48,17 +48,17 @@ class Generator3D(object):
                  vol_bound = None,
                  simplify_nfaces=None):
         self.model = model.to(device)
-        self.points_batch_size = points_batch_size
+        self.points_batch_size = points_batch_size # 每次评估的点数量，用于减小内存消耗
         self.refinement_step = refinement_step
-        self.threshold = threshold
+        self.threshold = threshold # 判定点是否被占用的阈值
         self.device = device
-        self.resolution0 = resolution0
-        self.upsampling_steps = upsampling_steps
-        self.with_normals = with_normals
-        self.input_type = input_type
-        self.padding = padding
+        self.resolution0 = resolution0 # 初始分辨率
+        self.upsampling_steps = upsampling_steps # 上采样步数
+        self.with_normals = with_normals # 是否估计法线
+        self.input_type = input_type # 输入类型（例如体素或点云）
+        self.padding = padding # MISE 算法中使用的填充
         self.sample = sample
-        self.simplify_nfaces = simplify_nfaces
+        self.simplify_nfaces = simplify_nfaces # 最终网格面简化后的面数量
         
         # for pointcloud_crop
         self.vol_bound = vol_bound
@@ -69,14 +69,14 @@ class Generator3D(object):
         ''' Generates the output mesh.
 
         Args:
-            data (tensor): data tensor
-            return_stats (bool): whether stats should be returned
+            data:输入数据张量,包含生成网格的必要信息
+            return_stats:是否返回统计信息（如时间消耗）
         '''
-        self.model.eval()
+        self.model.eval() # 将模型置于评估模式
         device = self.device
         stats_dict = {}
-
-        inputs = data.get('inputs', torch.empty(1, 0)).to(device)
+        # print(data)
+        inputs = data.get('inputs', torch.empty(1, 0)).to(device) # 获取输入数据，并移动到设备上
         kwargs = {}
 
         t0 = time.time()
@@ -86,11 +86,11 @@ class Generator3D(object):
             self.get_crop_bound(inputs)
             c_plane = self.encode_crop(inputs, device)
             c_final = c_plane
-        else: # input the entire volume
+        else: # 如果不需要裁剪，对整个体积进行处理
             inputs = add_key(inputs, data.get('inputs.ind'), 'points', 'index', device=device)
             # inputs = add_key(inputs, data.get('inputs.ind'), 'points', 'index', device=device)
             t0 = time.time()
-            with torch.no_grad():
+            with torch.no_grad(): # 在评估模式下，不需要计算梯度
                 #c = self.model.encode_inputs(inputs) ### original 
                
                 '''
@@ -105,11 +105,16 @@ class Generator3D(object):
                 '''
 
                 point_feature=None
-                c_plane = self.model.module.encoder(inputs)
+                if isinstance(self.model, nn.DataParallel):
+                    c_plane = self.model.module.encoder(inputs)
+                else:
+                    c_plane = self.model.encoder(inputs)
+                
                 c_final = c_plane
-
+        # 记录编码输入数据所用时间
         stats_dict['time (encode inputs)'] = time.time() - t0
 
+        # 从潜在空间中生成网格
         mesh = self.generate_from_latent(c_final, inputs, stats_dict=stats_dict, **kwargs) ### add inputs for poco mc try
 
         if return_stats:
@@ -119,7 +124,7 @@ class Generator3D(object):
 
 
     def generate_from_latent(self, c_final, inputs, stats_dict={}, **kwargs):
-        ''' Generates mesh from latent.
+        ''' 从潜在编码中生成网格
             Works for shapes normalized to a unit cube
 
         Args:
@@ -128,13 +133,14 @@ class Generator3D(object):
         '''
         inputs = inputs[0].cpu().numpy() #.detach().cpu().numpy() ###
         #print('inputs shape======',inputs.shape) #(10000,3)
+        # 将阈值转换为对数几率形式
         threshold = np.log(self.threshold) - np.log(1. - self.threshold)
 
         t0 = time.time()
         # Compute bounding box size
         box_size = 1 + self.padding
 
-        # Shortcut
+        # 如果不需要上采样，则直接生成初始分辨率的网格
         if self.upsampling_steps == 0:
             nx = self.resolution0
             pointsf = box_size * make_3d_grid(
@@ -145,6 +151,7 @@ class Generator3D(object):
             value_grid = values.reshape(nx, nx, nx)
         else:
             # input_points (10000,3)
+            # 对输入点计算边界最小值和最大值
             input_points = inputs
             bmin = input_points.min()
             bmax = input_points.max()
@@ -166,7 +173,7 @@ class Generator3D(object):
 
 
             if step is None:
-                step = (bmax - bmin) / (resolution - 1)  # 0.0039886895348044005
+                step = (bmax - bmin) / (resolution - 1)  # 0.0039886895348044005 # 计算网格步长
                 resolutionX = resolution  # 256
                 resolutionY = resolution  # 256
                 resolutionZ = resolution  # 256
@@ -181,9 +188,9 @@ class Generator3D(object):
             bmax_pad = bmax + padding * step
 
             pts_ids = (input_points - bmin) / step + padding
-            pts_ids = pts_ids.astype(np.int)  # (10000,3)
+            pts_ids = pts_ids.astype(np.int)  # (10000,3) # 计算点在网格中的索引位置
 
-            # create the volume
+            # 创建体积，初始化为 NaN
             volume = np.full((resolutionX + 2 * padding, resolutionY + 2 * padding, resolutionZ + 2 * padding), np.nan,
                              dtype=np.float64)
             mask_to_see = np.full((resolutionX + 2 * padding, resolutionY + 2 * padding, resolutionZ + 2 * padding),
@@ -192,7 +199,7 @@ class Generator3D(object):
 
                 # print("Pts", pts_ids.shape)
 
-                # creat the mask
+                # 创建掩码，用于标记哪些位置有有效点
                 mask = np.full((resolutionX + 2 * padding, resolutionY + 2 * padding, resolutionZ + 2 * padding), False,
                                dtype=bool)
                 mask[pts_ids[:, 0], pts_ids[:, 1], pts_ids[:, 2]] = True
@@ -206,12 +213,12 @@ class Generator3D(object):
                     max(0, yc - dilation_size):yc + dilation_size,
                     max(0, zc - dilation_size):zc + dilation_size] = True
 
-                # get the valid points
+                # 获取有效点的坐标
                 valid_points_coord = np.argwhere(mask).astype(np.float32)
                 valid_points = valid_points_coord * step + bmin_pad
                 #print('valid_points===',valid_points.shape)
 
-                # get the prediction for each valid points
+                # 获取每个有效点的占用预测值
                 z = []
                 near_surface_samples_torch = torch.tensor(valid_points, dtype=torch.float, device=device)
                 for pnts in tqdm(torch.split(near_surface_samples_torch, num_pts, dim=0), ncols=100, disable=True):
@@ -373,16 +380,165 @@ class Generator3D(object):
             o3d_verts = o3d.utility.Vector3dVector(verts)
             o3d_faces = o3d.utility.Vector3iVector(faces)
             mesh = o3d.geometry.TriangleMesh(o3d_verts, o3d_faces)
-
             if simplification_target is not None and simplification_target > 0:
                 mesh = o3d.geometry.TriangleMesh.simplify_quadric_decimation(mesh, simplification_target)
 
             return mesh
 
+    def generate_mesh_sliding(self, data, return_stats=True):
+        ''' Generates the output mesh in sliding-window manner.
+            Adapt for real-world scale.
 
+        Args:
+            data (tensor): data tensor
+            return_stats (bool): whether stats should be returned
+        '''
+        self.model.eval()
+        device = self.device
+        stats_dict = {}
+        
+        threshold = np.log(self.threshold) - np.log(1. - self.threshold)
 
-    def eval_points(self, p, c=None, point_feature=None, n=None, N=None, vol_bound=None, **kwargs): ### add n, N
-        ''' Evaluates the occupancy values for the points.
+        inputs = data.get('inputs', torch.empty(1, 0)).to(device)
+        kwargs = {}
+
+        # acquire the boundary for every crops
+        self.get_crop_bound(inputs)
+
+        nx = self.resolution0
+        n_crop = self.vol_bound['n_crop']
+        n_crop_axis = self.vol_bound['axis_n_crop']
+
+        # occupancy in each direction
+        r = nx * 2**self.upsampling_steps
+        occ_values = np.array([]).reshape(r,r,0)
+        occ_values_y = np.array([]).reshape(r,0,r*n_crop_axis[2])
+        occ_values_x = np.array([]).reshape(0,r*n_crop_axis[1],r*n_crop_axis[2])
+        for i in trange(n_crop):
+            # encode the current crop
+            vol_bound = {}
+            vol_bound['query_vol'] = self.vol_bound['query_vol'][i]
+            vol_bound['input_vol'] = self.vol_bound['input_vol'][i]
+            c = self.encode_crop(inputs, device, vol_bound=vol_bound)
+
+            bb_min = self.vol_bound['query_vol'][i][0]
+            bb_max = bb_min + self.vol_bound['query_crop_size']
+
+            if self.upsampling_steps == 0:
+                t = (bb_max - bb_min)/nx # inteval
+                pp = np.mgrid[bb_min[0]:bb_max[0]:t[0], bb_min[1]:bb_max[1]:t[1], bb_min[2]:bb_max[2]:t[2]].reshape(3, -1).T
+                pp = torch.from_numpy(pp).to(device)
+                values = self.eval_points(pp, c, vol_bound=vol_bound, **kwargs).detach().cpu().numpy()
+                values = values.reshape(nx, nx, nx)
+            else:
+                mesh_extractor = MISE(self.resolution0, self.upsampling_steps, threshold)
+                points = mesh_extractor.query()
+                while points.shape[0] != 0:
+                    pp = points / mesh_extractor.resolution
+                    pp = pp * (bb_max - bb_min) + bb_min
+                    pp = torch.from_numpy(pp).to(self.device)
+
+                    values = self.eval_points(pp, c, vol_bound=vol_bound, **kwargs).detach().cpu().numpy()
+                    values = values.astype(np.float64)
+                    mesh_extractor.update(points, values)
+                    points = mesh_extractor.query()
+                
+                values = mesh_extractor.to_dense()
+                # MISE consider one more voxel around boundary, remove
+                values = values[:-1, :-1, :-1]
+
+            # concatenate occ_value along every axis
+            # along z axis
+            occ_values = np.concatenate((occ_values, values), axis=2)
+            # along y axis
+            if (i+1) % n_crop_axis[2] == 0: 
+                occ_values_y = np.concatenate((occ_values_y, occ_values), axis=1)
+                occ_values = np.array([]).reshape(r, r, 0)
+            # along x axis
+            if (i+1) % (n_crop_axis[2]*n_crop_axis[1]) == 0:
+                occ_values_x = np.concatenate((occ_values_x, occ_values_y), axis=0)
+                occ_values_y = np.array([]).reshape(r, 0,r*n_crop_axis[2])
+
+        value_grid = occ_values_x    
+        mesh = self.extract_mesh(value_grid, c, stats_dict=stats_dict)
+
+        if return_stats:
+            return mesh, stats_dict
+        else:
+            return mesh
+
+    def get_crop_bound(self, inputs):
+        ''' Divide a scene into crops, get boundary for each crop
+
+        Args:
+            inputs (dict): input point cloud
+        '''
+        query_crop_size = self.vol_bound['query_crop_size']
+        input_crop_size = self.vol_bound['input_crop_size']
+        lb_query_list, ub_query_list = [], []
+        lb_input_list, ub_input_list = [], []
+        
+        lb = inputs.min(axis=1).values[0].cpu().numpy() - 0.01
+        ub = inputs.max(axis=1).values[0].cpu().numpy() + 0.01
+        lb_query = np.mgrid[lb[0]:ub[0]:query_crop_size,\
+                    lb[1]:ub[1]:query_crop_size,\
+                    lb[2]:ub[2]:query_crop_size].reshape(3, -1).T
+        ub_query = lb_query + query_crop_size
+        center = (lb_query + ub_query) / 2
+        lb_input = center - input_crop_size/2
+        ub_input = center + input_crop_size/2
+        # number of crops alongside x,y, z axis
+        self.vol_bound['axis_n_crop'] = np.ceil((ub - lb)/query_crop_size).astype(int)
+        # total number of crops
+        num_crop = np.prod(self.vol_bound['axis_n_crop'])
+        self.vol_bound['n_crop'] = num_crop
+        self.vol_bound['input_vol'] = np.stack([lb_input, ub_input], axis=1)
+        self.vol_bound['query_vol'] = np.stack([lb_query, ub_query], axis=1)
+        
+    def encode_crop(self, inputs, device, vol_bound=None):
+        ''' Encode a crop to feature volumes
+
+        Args:
+            inputs (dict): input point cloud
+            device (device): pytorch device
+            vol_bound (dict): volume boundary
+        '''
+        if vol_bound == None:
+            vol_bound = self.vol_bound
+
+        index = {}
+        for fea in self.vol_bound['fea_type']:
+            # crop the input point cloud
+            mask_x = (inputs[:, :, 0] >= vol_bound['input_vol'][0][0]) &\
+                    (inputs[:, :, 0] < vol_bound['input_vol'][1][0])
+            mask_y = (inputs[:, :, 1] >= vol_bound['input_vol'][0][1]) &\
+                    (inputs[:, :, 1] < vol_bound['input_vol'][1][1])
+            mask_z = (inputs[:, :, 2] >= vol_bound['input_vol'][0][2]) &\
+                    (inputs[:, :, 2] < vol_bound['input_vol'][1][2])
+            mask = mask_x & mask_y & mask_z
+            
+            p_input = inputs[mask]
+            if p_input.shape[0] == 0: # no points in the current crop
+                p_input = inputs.squeeze()
+                ind = coord2index(p_input.clone(), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
+                if fea == 'grid':
+                    ind[~mask] = self.vol_bound['reso']**3
+                else:
+                    ind[~mask] = self.vol_bound['reso']**2
+            else:
+                ind = coord2index(p_input.clone(), vol_bound['input_vol'], reso=self.vol_bound['reso'], plane=fea)
+            index[fea] = ind.unsqueeze(0)
+            input_cur = add_key(p_input.unsqueeze(0), index, 'points', 'index', device=device)
+        
+        with torch.no_grad():
+            if isinstance(self.model, nn.DataParallel):
+                c = self.model.module.encoder(input_cur)
+            else:
+                c = self.model.encoder(input_cur)
+        return c
+
+    def eval_points(self, p, c_info=None, point_feature=None, n=None, N=None, vol_bound=None, **kwargs): ### add n, N
+        ''' 评估输入点的占用值，返回它们是否属于三维物体内部的概率
 
         Args:
             p (tensor): points 
@@ -395,7 +551,11 @@ class Generator3D(object):
                 chunk_size = 5000
                 pi_chunks = torch.split(pi, chunk_size, 1)
                 with torch.no_grad():
-                    p_r = self.model.module.decode(pi, c, logits=True)
+                    c_planes,p,c_points = c_info
+                    if isinstance(self.model, nn.DataParallel):
+                        p_r = self.model.module.decode(c_planes,pi,p,c_points,logits=True)
+                    else:
+                        p_r = self.model.decode(c_planes,pi,p,c_points,logits=True)
                     occ_hat = p_r.probs
                 occ_hats.append(occ_hat.squeeze(0).detach().cpu())
         occ_hat = torch.cat(occ_hats, dim=0)

@@ -106,17 +106,17 @@ def get_generator(model, cfg, device):
 
 # Datasets
 def get_dataset(mode, cfg, return_idx=False):
-    ''' Returns the dataset.
+    ''' 返回指定的数据集对象.
 
     Args:
-        model (nn.Module): the model which is used
-        cfg (dict): config dictionary
-        return_idx (bool): whether to include an ID field
+        mode: train/train_boundary/val/test
+        cfg (dict): 配置文件
+        return_idx (bool): 如果为 True,则返回数据时会附带一个索引字段
     '''
-    method = cfg['method']
-    dataset_type = cfg['data']['dataset']
-    dataset_folder = cfg['data']['path']
-    categories = cfg['data']['classes']
+    method = cfg['method'] #conv_onet
+    dataset_type = cfg['data']['dataset'] #Shapes3D
+    dataset_folder = cfg['data']['path'] #数据集路径
+    categories = cfg['data']['classes'] #类别：null
 
     # Get split
     splits = {
@@ -131,9 +131,9 @@ def get_dataset(mode, cfg, return_idx=False):
     # Create dataset
     if dataset_type == 'Shapes3D':
         # Dataset fields
-        # Method specific fields (usually correspond to output)
+        # fields：采样的点，包含points、occ和idx的data字典
         fields = method_dict[method].config.get_data_fields(mode, cfg)
-        # Input fields
+        # Input fields：采样并添加噪声的点云，包含points、normals的data字典
         inputs_field = get_inputs_field(mode, cfg)
         if inputs_field is not None:
             fields['inputs'] = inputs_field
@@ -160,11 +160,12 @@ def get_inputs_field(mode, cfg):
         mode (str): the mode which is used
         cfg (dict): config dictionary
     '''
-    input_type = cfg['data']['input_type']
+    input_type = cfg['data']['input_type'] #pointcloud
 
     if input_type is None:
         inputs_field = None
     elif input_type == 'pointcloud':
+        # 创建一组数据变换操作，在加载或训练过程中对点云进行采样和添加噪声
         transform = transforms.Compose([
             data.SubsamplePointcloud(cfg['data']['pointcloud_n']),
             data.PointcloudNoise(cfg['data']['pointcloud_noise'])

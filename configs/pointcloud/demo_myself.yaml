@@ -1,0 +1,29 @@
+inherit_from: configs/pointcloud/room_grid_attention_encoder.yaml
+data:
+  input_type: pointcloud
+  classes: null
+  path: /home/xxf/convolutional_occupancy_networks/data/demo/myself_processed
+  # path: /data3/xxf/dataset/las_data
+  pointcloud_n: 500000 #black
+  # pointcloud_n: 2000
+  pointcloud_noise: 0.0
+  pointcloud_file: normalized_pointcloud.npz
+  voxels_file: null
+  points_file: null
+  points_iou_file: null
+  # pointcloud_chamfer_file: pointcloud.npz
+  multi_files: null
+training:
+  out_dir: /data3/xxf/GridFormer/out/pointcloud/room_grid_attention_encoder/test1
+test:
+  threshold: 0.2
+  eval_mesh: true
+  eval_pointcloud: false 
+  # model_file: https://s3.eu-central-1.amazonaws.com/avg-projects/convolutional_occupancy_networks/models/pointcloud/room_3plane.pt
+  model_file: /data3/xxf/GridFormer/out/pointcloud/room_grid_attention_encoder/model_best.pt
+  # model_file: /data3/xxf/GridFormer/out/pointcloud/shapenet_3plane_attention_encoder_3000_n0.005/model_best.pt
+generation:
+  vis_n_outputs: 2
+  refine: false
+  n_x: 128
+  n_z: 1

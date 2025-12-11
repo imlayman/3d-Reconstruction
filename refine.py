@@ -3,6 +3,7 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 import numpy as np
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import argparse
 import time, datetime
 import matplotlib; matplotlib.use('Agg')
@@ -85,7 +86,6 @@ data_vis_list = []
 model = config.get_model(cfg, device=device, dataset=train_dataset)
 ### use 2 gpu
 model.to(device)
-model = nn.DataParallel(model, device_ids=[0, 1])
 
 print('output path: ', cfg['training']['out_dir'])
 
@@ -99,6 +99,7 @@ scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1500, eta_min=
 trainer = config.get_trainer(model, optimizer, scheduler, cfg, device=device)
 
 checkpoint_io = CheckpointIO(out_dir, model=model, optimizer=optimizer, scheduler=scheduler)
+
 try:
     load_dict = checkpoint_io.load('model.pt')
 except FileExistsError:

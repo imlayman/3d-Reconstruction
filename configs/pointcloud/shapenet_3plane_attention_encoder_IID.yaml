@@ -12,7 +12,7 @@ data:
   boundary_file: boundary_points.npz
   voxels_file: null
 model:
-  encoder: FKAConvEncoder2d #编码器pointnet_local_pool
+  encoder: pointnet_local_pool #编码器FKAConvEncoder2d
   encoder_kwargs: #编码器的超参数
     hidden_dim: 32 #隐藏层的维数
     plane_type: ['xz', 'xy', 'yz'] #3平面
@@ -29,7 +29,7 @@ model:
     hidden_size: 32
   c_dim: 32 #编码器输出的特征维度
 training:
-  out_dir: /data2/xxf/GridFormer/out/pointcloud/shapenet_3plane_attention_FKAConvEncoder_3000_n0.005_IID/
+  out_dir: /data2/xxf/GridFormer/out/pointcloud/shapenet_3plane_attention_encoder_3000_n0.005_IID
   batch_size: 16
   model_selection_metric: iou
   model_selection_mode: maximize

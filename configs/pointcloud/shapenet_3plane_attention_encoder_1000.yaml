@@ -3,7 +3,7 @@ data:
   input_type: pointcloud
   classes: null
   path: /data3/xxf/dataset/ShapeNet
-  pointcloud_n: 3000 # 300
+  pointcloud_n: 1000 # 300
   pointcloud_noise: 0.005
   points_subsample: 2048
   points_file: points.npz
@@ -29,7 +29,7 @@ model:
     hidden_size: 32
   c_dim: 32 #编码器输出的特征维度
 training:
-  out_dir: /data2/xxf/GridFormer/out/pointcloud/shapenet_3plane_attention_FKAConvEncoder_3000_n0.005_IID/
+  out_dir: /data2/xxf/GridFormer/out/pointcloud/shapenet_3plane_attention_FKAConvEncoder_1000_n0.005_IID
   batch_size: 16
   model_selection_metric: iou
   model_selection_mode: maximize

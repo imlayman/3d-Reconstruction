@@ -1,7 +1,7 @@
 method: conv_onet
 data:
   dataset: Shapes3D
-  path: data/ShapeNet
+  path: /data3/xxf/dataset/ShapeNet
   watertight_path: data/watertight
   classes: null
   input_type: img
@@ -10,32 +10,40 @@ data:
   val_split: val
   test_split: test
   dim: 3
+  # points.npz:由points_uniform和points_surface组成，共100000个点，包含points、occupancies、loc、scale四个字段
+  # points_uniform:在整个网格的边界框（bounding box）范围内均匀分布(bounding box:包围整个3D网格模型的最小长方体)
+  # points_surface:从网格表面采样，并对采样点加入高斯噪声
+  # points:点云的坐标
+  # occupancies:二值占用真值
   points_file: points.npz
-  points_iou_file: points.npz
+  points_iou_file: points.npz # 用于计算 IOU 的点云数据文件
   multi_files: null
-  points_subsample: 1024
-  points_unpackbits: true
-  model_file: model.off
+  points_subsample: 1024 # 每次训练从点云数据中采样的点数量，设置为 1024
+  points_unpackbits: true # 是否解包二进制点数据
+  model_file: model.off # 原始模型文件的名称
   watertight_file: model_watertight.off
   img_folder: img
   img_size: 224 
   img_with_camera: false
   img_augment: false
   n_views: 24
+  # pointcloud.npz:从真值网格表面均匀采样100000个点云,包含points、normals、loc、scale四个字段
+  # points:点云的坐标
+  # normals:点云的法向量
   pointcloud_file: pointcloud.npz
-  pointcloud_chamfer_file: pointcloud.npz
+  pointcloud_chamfer_file: pointcloud.npz #用于计算 CD 的点云文件
   pointcloud_n: 256
   pointcloud_target_n: 1024
   pointcloud_noise: 0.05
-  voxels_file: 'model.binvox'
+  voxels_file: 'model.binvox' #体素文件
   padding: 0.1
 model:
-  decoder: simple
-  encoder: resnet18
+  decoder: simple # 解码器类型
+  encoder: resnet18 # 编码器类型
   decoder_kwargs: {}
   encoder_kwargs: {}
   multi_gpu: false
-  c_dim: 512
+  c_dim: 512 # 编码器输出的特征维度
 training:
   out_dir:  out/default
   batch_size: 64
@@ -50,11 +58,11 @@ training:
   n_workers: 4
   n_workers_val: 4
 test:
-  threshold: 0.5
+  threshold: 0.5 # 阈值，用于生成二值化输出
   eval_mesh: true
   eval_pointcloud: true
   remove_wall: false
-  model_file: model_best.pt
+  model_file: model_best.pt # 测试时加载的模型文件
 generation:
   batch_size: 100000
   refinement_step: 0
@@ -64,7 +72,7 @@ generation:
   generation_dir: generation
   use_sampling: false
   resolution_0: 32
-  upsampling_steps: 3 # 2
+  upsampling_steps: 3 # 2 # 上采样步数
   simplify_nfaces: null
   copy_groundtruth: false
   copy_input: true

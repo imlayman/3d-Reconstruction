@@ -1,7 +1,7 @@
 import numpy as np
 from .triangle_hash import TriangleHash as _TriangleHash
 
-
+# 用于确定每个点 points 是否在给定的 mesh 内部
 def check_mesh_contains(mesh, points, hash_resolution=512):
     intersector = MeshIntersector(mesh, hash_resolution)
     contains = intersector.query(points)
@@ -64,7 +64,7 @@ class MeshIntersector:
         nintersect0 = np.bincount(points_indices_0, minlength=points.shape[0])
         nintersect1 = np.bincount(points_indices_1, minlength=points.shape[0])
         
-        # Check if point contained in mesh
+        # 通过偶奇规则判断每个点是否在网格内。偶数次穿过网格表示在外部，奇数次穿过表示在内部
         contains1 = (np.mod(nintersect0, 2) == 1)
         contains2 = (np.mod(nintersect1, 2) == 1)
         if (contains1 != contains2).any():
@@ -72,6 +72,7 @@ class MeshIntersector:
         contains[mask] = (contains1 & contains2)
         return contains
 
+    # 计算每个点到三角形的深度，并判断该深度与点的 Z 值的关系，检查其穿过的方向和次数
     def compute_intersection_depth(self, points, triangles):
         t1 = triangles[:, 0, :]
         t2 = triangles[:, 1, :]

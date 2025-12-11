@@ -161,21 +161,23 @@ def get_generator(model, cfg, device, **kwargs):
 
 
 def get_data_fields(mode, cfg):
-    ''' Returns the data fields.
+    ''' 根据配置文件(cfg)和运行模式(mode)初始化数据字段.
 
     Args:
         mode (str): the mode which is used
         cfg (dict): imported yaml config
     '''
+    # 每次从点云中随机采样若干个点用于训练或评估
     points_transform = data.SubsamplePoints(cfg['data']['points_subsample'])
     
-    input_type = cfg['data']['input_type']
-    fields = {}
+    input_type = cfg['data']['input_type'] # pointcloud
+    fields = {} #创建一个空字典，用于存储不同的数据字段
     if cfg['data']['points_file'] is not None:
         if input_type != 'pointcloud_crop':
             if mode != 'train_boundary':
                 fields['points'] = data.PointsField(
-                    cfg['data']['points_file'], points_transform,
+                    cfg['data']['points_file'],
+                    points_transform,
                     unpackbits=cfg['data']['points_unpackbits'],
                     multi_files=cfg['data']['multi_files']
                 )
@@ -193,7 +195,7 @@ def get_data_fields(mode, cfg):
                 multi_files=cfg['data']['multi_files']
             )
 
-    
+    # 如果当前模式是 'val' 或 'test'，则加载 IOU 和体素数据用于评估
     if mode in ('val', 'test'):
         points_iou_file = cfg['data']['points_iou_file']
         voxels_file = cfg['data']['voxels_file']
@@ -212,5 +214,5 @@ def get_data_fields(mode, cfg):
                 )
         if voxels_file is not None:
             fields['voxels'] = data.VoxelsField(voxels_file)
-
+    
     return fields

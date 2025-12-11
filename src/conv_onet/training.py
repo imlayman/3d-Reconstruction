@@ -1,6 +1,7 @@
 import os
 from tqdm import trange
 import torch
+from torch import nn
 from torch.nn import functional as F
 from torch import distributions as dist
 from src.common import (
@@ -44,11 +45,11 @@ class Trainer(BaseTrainer):
         Args:
             data (dict): data dictionary
         '''
-        self.model.train()
-        self.optimizer.zero_grad()
-        loss = self.compute_loss(data, m)
-        loss.backward()
-        self.optimizer.step()
+        self.model.train() # 设置模型为训练模式
+        self.optimizer.zero_grad() # 清除梯度
+        loss = self.compute_loss(data, m) # 计算损失 
+        loss.backward() # 反向传播
+        self.optimizer.step() # 更新参数
 
         return loss.item()
     
@@ -61,9 +62,9 @@ class Trainer(BaseTrainer):
         Args:
             data (dict): data dictionary
         '''
-        self.model.eval()
+        self.model.eval() # 进入评估模式
 
-        device = self.device
+        device = self.device 
         threshold = self.threshold
         eval_dict = {}
 
@@ -88,15 +89,30 @@ class Trainer(BaseTrainer):
 
         # Compute iou
         with torch.no_grad():
-            p_out = self.model.module(points_iou, inputs, sample=self.eval_sample, **kwargs)
-            
-        occ_iou_np = (occ_iou >= 0.5).cpu().numpy()
+            if isinstance(self.model, nn.DataParallel):
+                # 推测占用概率
+                p_out = self.model.module(points, inputs, sample=self.eval_sample, **kwargs)
+            else:
+                p_out = self.model(points, inputs, sample=self.eval_sample, **kwargs)
+
+        # # Compute iou
+        # with torch.no_grad():
+        #     if isinstance(self.model, nn.DataParallel):
+        #         # 推测占用概率
+        #         p_out = self.model.module(points_iou, inputs, sample=self.eval_sample, **kwargs)
+        #     else:
+        #         p_out = self.model(points_iou, inputs, sample=self.eval_sample, **kwargs)
+        
+        # 根据阈值判断占用情况
+        # occ_iou_np = (occ_iou >= 0.5).cpu().numpy()
+        occ_iou_np = (occ >= 0.5).cpu().numpy()
         occ_iou_hat_np = (p_out.probs >= threshold).cpu().numpy()
 
+        # 计算 IOU（交并比）
         iou = compute_iou(occ_iou_np, occ_iou_hat_np).mean()
         eval_dict['iou'] = iou
 
-        # Estimate voxel iou
+        # 如果存在体素数据，则计算体素的 IOU
         if voxels_occ is not None:
             voxels_occ = voxels_occ.to(device)
             points_voxels = make_3d_grid(
@@ -117,15 +133,15 @@ class Trainer(BaseTrainer):
         return eval_dict
 
     def compute_loss(self, data, m):
-        ''' Computes the loss.
+        ''' 基于二元交叉熵损失
 
         Args:
             data (dict): data dictionary
         '''
         device = self.device
-        p = data.get('points').to(device)
+        p = data.get('points').to(device) # 采样点
         occ = data.get('points.occ').to(device)
-        inputs = data.get('inputs', torch.empty(p.size(0), 0)).to(device)
+        inputs = data.get('inputs', torch.empty(p.size(0), 0)).to(device) # 原始点云
 
         if 'pointcloud_crop' in data.keys():
             # add pre-computed index
@@ -135,8 +151,9 @@ class Trainer(BaseTrainer):
             p = add_key(p, data.get('points.normalized'), 'p', 'p_n', device=device)
 
         p_r = self.model(p, inputs, logits=False)
+        # 通过 Bernoulli 分布 将 logits 封装成二分类问题
         p_r = dist.Bernoulli(logits=p_r)
-   
+        # 通过参数 m 对 logits 进行加权调整，主要目的是平衡占用点和非占用点的损失
         logits = (p_r.logits - m * (occ * 2 - 1))
         # logits = p_r.logits
         loss_i = F.binary_cross_entropy_with_logits(

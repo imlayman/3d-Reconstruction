@@ -1,5 +1,6 @@
 import torch
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import shutil
 import argparse
 from tqdm import tqdm
@@ -44,8 +45,8 @@ dataset = config.get_dataset('test', cfg, return_idx=True)
 
 # Model
 model = config.get_model(cfg, device=device, dataset=dataset)
-### 2 gpu
-model = nn.DataParallel(model, device_ids=[0]) ###
+# ### 2 gpu
+# model = nn.DataParallel(model, device_ids=[0]) ###
 
 
 checkpoint_io = CheckpointIO(out_dir, model=model)
@@ -176,7 +177,6 @@ for it, data in enumerate(tqdm(test_loader)):
         # out_file_dict['mesh'] = mesh_out_file
         ######################
         if mesh is not None:
-
             vertices = np.asarray(mesh.vertices)
             vertices = vertices / 1 #scale
             vertices = o3d.utility.Vector3dVector(vertices)
@@ -186,8 +186,10 @@ for it, data in enumerate(tqdm(test_loader)):
 
             if os.path.splitext(modelname)[1] == ".ply":
                 o3d.io.write_triangle_mesh(os.path.join(mesh_dir, modelname), mesh)
+                # print(os.path.join(mesh_dir, modelname))
             else:
                 o3d.io.write_triangle_mesh(os.path.join(mesh_dir, modelname + ".ply"), mesh)
+                # print(os.path.join(mesh_dir, modelname))
         ######################
 
 
@@ -238,7 +240,7 @@ time_df.set_index(['idx'], inplace=True)
 time_df.to_pickle(out_time_file)
 
 # Create pickle files  with main statistics
-time_df_class = time_df.groupby(by=['class name']).mean()
+time_df_class = time_df.groupby(by=['class name']).mean(numeric_only=True)
 time_df_class.to_pickle(out_time_file_class)
 
 # Print results

@@ -6,6 +6,13 @@ from torch_scatter import scatter_mean, scatter_max
 from src.common import coordinate2index, normalize_coordinate, normalize_3d_coordinate, map2local
 from src.encoder.unet import UNet
 from src.encoder.unet3d import ResidualUNet3D, UNet3D
+from src.encoder.fkaconv import FKABlock
+from modules.pnp3d import PnP3D
+from modules.graphblock import GraphBlock
+from pytorch3d.ops import knn_gather, knn_points
+
+from src.encoder.fkaconv import FKABlock
+
 
 class LocalPoolPointnet(nn.Module):
     ''' PointNet-based encoder network with ResNet blocks for each point.
@@ -40,6 +47,12 @@ class LocalPoolPointnet(nn.Module):
             nn.ReLU(),
             nn.Linear(2*hidden_dim, c_dim),
         )
+
+        # # 使用 PnP3D 作为点云特征提取模块
+        # self.pnp3d = PnP3D(input_features_dim = c_dim)
+
+        # 使用GraphBlock作为点云特征提取模块
+        self.graphblock = GraphBlock(dim=c_dim, k1=40, k2=20)
 
         self.actvn = nn.ReLU()
         self.hidden_dim = hidden_dim
@@ -129,6 +142,86 @@ class LocalPoolPointnet(nn.Module):
             index['grid'] = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
             
         c = self.fc_pos(p)
+        # print(c_temp.size())
+        # print(p.transpose(2,1).size())
+        # c = self.pnp3d(p.transpose(2,1),c_temp.transpose(2,1),k=20) 
+        # c = self.graphblock(c.transpose(2,1))
+        # c = c.transpose(2,1)
+        # print(c.size())
+        fea = {}
+        if 'grid' in self.plane_type:
+            fea['grid'] = self.generate_grid_features(p, c)
+        if 'xz' in self.plane_type:
+            fea['xz'] = self.generate_plane_features(p, c, plane='xz') # [1, 32, 64, 64]
+            # print('fea[xz]', fea['xz'].shape)
+        if 'xy' in self.plane_type:
+            fea['xy'] = self.generate_plane_features(p, c, plane='xy')
+        if 'yz' in self.plane_type:
+            fea['yz'] = self.generate_plane_features(p, c,  plane='yz')
+        
+        if self.unet3d == None:
+            fea,p,c = self.unet(p, fea, self.plane_type, c)
+        else:
+            fea,p,c = self.unet3d(fea, p, c)
+
+        return fea,p,c
+
+
+class FKAConvEncoder2d(nn.Module):
+    def __init__(self, c_dim, dim, hidden_dim=128,res=64, k=16, padding=0.1, n_blocks=5, act_fn="relu",
+                 unet=False, unet_kwargs=None,plane_resolution=None,plane_type='xz'):
+        super().__init__()
+        self.c_dim = c_dim
+        self.res, self.padding, self.k = res, padding, k
+        self.stem = nn.Linear(dim, c_dim)
+        self.hidden__dim = hidden_dim
+        self.convs = nn.ModuleList([FKABlock(c_dim, c_dim, k=k) for _ in range(n_blocks)])
+
+        if unet:
+            self.unet = UNet(c_dim, in_channels=c_dim, **unet_kwargs)
+        else:
+            self.unet = None
+
+        self.reso_plane = plane_resolution
+        self.plane_type = plane_type
+
+    
+    def generate_plane_features(self, p, c, plane='xz'):
+        # acquire indices of features in plane
+        xy = normalize_coordinate(p.clone(), plane=plane, padding=self.padding) # normalize to the range of (0, 1)
+        index = coordinate2index(xy, self.reso_plane)
+
+        # scatter plane features from points
+        fea_plane = c.new_zeros(p.size(0), self.c_dim, self.reso_plane**2)
+        c = c.permute(0, 2, 1) # B x 512 x T
+        fea_plane = scatter_mean(c, index, out=fea_plane) # B x 512 x reso^2
+        fea_plane = fea_plane.reshape(p.size(0), self.c_dim, self.reso_plane, self.reso_plane) # sparce matrix (B x 512 x reso x reso)
+
+        return fea_plane
+
+    def forward(self, p):
+        """
+        - p: b n 3
+        """
+        coord = {}
+        index = {}
+        if 'xz' in self.plane_type:
+            coord['xz'] = normalize_coordinate(p.clone(), plane='xz', padding=self.padding)
+            index['xz'] = coordinate2index(coord['xz'], self.reso_plane)
+        if 'xy' in self.plane_type:
+            coord['xy'] = normalize_coordinate(p.clone(), plane='xy', padding=self.padding)
+            index['xy'] = coordinate2index(coord['xy'], self.reso_plane)
+        if 'yz' in self.plane_type:
+            coord['yz'] = normalize_coordinate(p.clone(), plane='yz', padding=self.padding)
+            index['yz'] = coordinate2index(coord['yz'], self.reso_plane)
+        if 'grid' in self.plane_type:
+            coord['grid'] = normalize_3d_coordinate(p.clone(), padding=self.padding)
+            index['grid'] = coordinate2index(coord['grid'], self.reso_grid, coord_type='3d')
+
+        c = self.stem(p)  # b n d
+        knn = knn_points(p, p, K=self.k, return_nn=True)
+        for conv in self.convs:
+            c = conv(p, c, p, knn)
 
 
         fea = {}
@@ -142,11 +235,6 @@ class LocalPoolPointnet(nn.Module):
         if 'yz' in self.plane_type:
             fea['yz'] = self.generate_plane_features(p, c,  plane='yz')
         
-        if self.unet3d == None:
-            fea = self.unet(p, fea, self.plane_type, c)
-        else:
-            fea = self.unet3d(fea, p, c)
+        fea,p,c = self.unet(p, fea, self.plane_type, c)
 
-        return fea
-
-
+        return fea,p,c

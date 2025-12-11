@@ -1,19 +1,20 @@
-method: conv_onet
+inherit_from: configs/pointcloud/room_grid_attention_encoder.yaml
 data:
-  input_type: pointcloud
-  classes: ['rooms_04', 'rooms_05', 'rooms_06', 'rooms_07', 'rooms_08']
-  path: /data3/xxf/dataset/synthetic_room_dataset
-  pointcloud_n: 10000
-  pointcloud_noise: 0.005
-  points_subsample: 2048
-  points_file: points_iou
-  points_iou_file: points_iou
-  pointcloud_file: pointcloud
-  pointcloud_chamfer_file: pointcloud
-  boundary: points_iou/boundary0.08
-  boundary_file: boundary_points
-  multi_files: 10
+  input_type: pointcloud_crop
+  classes: null
+  path: /home/xxf/convolutional_occupancy_networks/data/demo/myself_processed
+  pointcloud_n: 1000000
+  pointcloud_noise: 0.0
+  points_file: null
+  points_iou_file: null
+  pointcloud_file: pointcloud.npz
+  pointcloud_chamfer_file: null
+  boundary: null
+  boundary_file: null
+  multi_files: null
   voxels_file: null
+  unit_size: 0.05 
+  query_vol_size: 45 
 model:
   encoder: pointnet_local_pool
   encoder_kwargs:
@@ -34,7 +35,7 @@ model:
   c_dim: 32
 training:
   out_dir: /data3/xxf/GridFormer/out/pointcloud/room_grid_attention_encoder
-  batch_size: 6 #32 #9 #24 #10 #32
+  batch_size: 8 #32 #9 #24 #10 #32
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
@@ -50,11 +51,9 @@ test:
   threshold: 0.2
   eval_mesh: true
   eval_pointcloud: false
-  remove_wall: true
   model_file: model_best.pt
 generation:
   generation_dir: generation
-  vis_n_outputs: 2
-  refine: false
-  n_x: 128
-  n_z: 1
+  sliding_window: true # generate mesh in the sliding-window manner
+  resolution_0: 64 # resolution for each crop
+  upsampling_steps: 0

@@ -1,15 +1,18 @@
 method: conv_onet
 data:
   input_type: pointcloud
-  classes: null
-  path: /data3/xxf/dataset/ShapeNet
-  pointcloud_n: 3000 # 300
+  classes: ['rooms_04', 'rooms_05', 'rooms_06', 'rooms_07', 'rooms_08']
+  path: /data3/xxf/dataset/synthetic_room_dataset
+  pointcloud_n: 10000 # 300
   pointcloud_noise: 0.005
   points_subsample: 2048
-  points_file: points.npz
-  points_iou_file: points.npz
-  boundary: boundary0.08 # 边界点的定义
-  boundary_file: boundary_points.npz
+  points_file: points_iou
+  points_iou_file: points_iou
+  pointcloud_file: pointcloud
+  pointcloud_chamfer_file: pointcloud
+  boundary: points_iou/boundary0.08 # 边界点的定义
+  boundary_file: boundary_points
+  multi_files: 10
   voxels_file: null
 model:
   encoder: FKAConvEncoder2d #编码器pointnet_local_pool
@@ -29,8 +32,8 @@ model:
     hidden_size: 32
   c_dim: 32 #编码器输出的特征维度
 training:
-  out_dir: /data2/xxf/GridFormer/out/pointcloud/shapenet_3plane_attention_FKAConvEncoder_3000_n0.005_IID/
-  batch_size: 16
+  out_dir: /data3/xxf/GridFormer/out/pointcloud/room_3plane_attention_FKAConvEncoder_3000_n0.005_IID/
+  batch_size: 8
   model_selection_metric: iou
   model_selection_mode: maximize
   print_every: 100
